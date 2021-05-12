@@ -12,4 +12,5 @@ extern bool ReadAccelerometer(tflite::ErrorReporter* error_reporter,
                               float* input, int length, bool reset_buffer);
 
 extern float save_data[600];     // new
+extern int begin_index;
 #endif  // ACCELEROMETER_HANDLER_H_

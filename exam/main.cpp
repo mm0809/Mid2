@@ -21,14 +21,19 @@ DigitalOut led3(LED3);
 uLCD_4DGL uLCD(D1, D0, D2); // uLCD
 
 BufferedSerial pc(USBTX, USBRX);    // rpc
-void LEDControl(Arguments* in, Reply* out); // the parameter is necessary
+void send(Arguments* in, Reply* out); // the parameter is necessary
 void GestureUI(Arguments* in, Reply* out); 
 void AngleDetect(Arguments* in, Reply* out); 
 void loopState(Arguments* in, Reply* out); 
-RPCFunction testRPC(&LEDControl, "LEDtest");
+
+RPCFunction sendRPC(&send, "send");
 RPCFunction GestureUIRPC(&GestureUI, "AI");
 RPCFunction loopStateRPC(&loopState, "loop");
 RPCFunction AngleDetectRPC(&AngleDetect, "Angle");
+
+//---test
+int featuredata[20];
+int featureId = 0;
 
 //-----AI-----
 Thread tAI;
@@ -87,7 +92,7 @@ int main()
     led2 = 1;
 
 
-    printf("\nConnecting to %s...\r\n", MBED_CONF_APP_WIFI_SSID);
+    //printf("\nConnecting to %s...\r\n", MBED_CONF_APP_WIFI_SSID);
     //int ret = wifi->connect(MBED_CONF_APP_WIFI_SSID, MBED_CONF_APP_WIFI_PASSWORD, NSAPI_SECURITY_WPA_WPA2);
     //if (ret != 0) {
     //        printf("\nConnection error: %d\r\n", ret);
@@ -103,7 +108,7 @@ int main()
 
     //TODO: revise host to your IP
     const char* host = "192.168.0.5";
-    printf("Connecting to TCP network...\r\n");
+    //printf("Connecting to TCP network...\r\n");
 
     SocketAddress sockAddr;
     //sockAddr.set_ip_address(host);
@@ -173,11 +178,11 @@ int main()
 }
 
 
-void LEDControl(Arguments* in, Reply* out)
+void send(Arguments* in, Reply* out)
 {
-    i++;
-    uLCD.locate(0, 0);
-    uLCD.printf("\ntest RPC: %d", i);
+    for (int i = 0; i < 5; i++) {
+        cout << featuredata[i] << endl;
+    }
 }
 
 void GestureUI(Arguments* in, Reply* out)
@@ -259,7 +264,7 @@ void runAngle()
 }
 
 int runAI() {
-
+    featureId = 0;
     led3 = 1;
   // Whether we should clear the buffer next time we fetch data
   bool should_clear_buffer = false;
@@ -332,8 +337,6 @@ int runAI() {
 
   while (true) {
     if (state == 0) {
-        cout << "set a ngleID: " << angleID << endl;
-        led3 = 0;
       return 1;
     }
 
@@ -368,6 +371,41 @@ int runAI() {
       angleID = gesture_index;
       uLCD.locate(1, 0);
       uLCD.printf("\nangle: %d", angleList[angleID]);
+
+      int G = begin_index/3;
+      float refX = save_data[G*3];
+      float refY = save_data[G*3 + 1];
+      float refZ = save_data[G*3 + 2];
+      float lengthr = sqrt(refX*refX + refY*refY + refZ*refZ);
+      float pMax = 0;
+      float nMax = 0;
+
+      for (int i = G; i < 150; i++) {
+        float dotProduct = refX*save_data[i*3] + refY*save_data[i*3 + 1] + refZ*save_data[i*3 + 2]; 
+        float lengthProduct = lengthr * sqrt(save_data[i*3]*save_data[i*3] + save_data[i*3 + 1]*save_data[i*3 + 1] + save_data[i*3 + 2]*save_data[i*3 + 2]);
+        float angle = acos(dotProduct / lengthProduct) * 57.29577;
+        int dir = (refY*save_data[i*3 + 2] - refZ*save_data[i*3 + 1]) + (refZ*save_data[i*3] - refX*save_data[i*3 + 2]) + (refX*save_data[i*3 + 1] - refY*save_data[i*3]);
+        
+        if (dir >= 0) {
+            if (angle > pMax)
+                pMax = angle;
+        } else {
+            if (angle > nMax)
+                nMax = angle;
+        }
+        //cout << i << " " << angle << " " << dir << endl;
+
+      }
+      if (pMax + nMax > 90)
+          featuredata[featureId] = 1;
+      else
+          featuredata[featureId] = 0;
+      //cout << "featureId: " << featureId << "gestureID: " << angleID << "feature: " << featuredata[featureId] << endl;
+      //cout << begin_index << endl;
+        //mqtt_queue.call(&publish_message, pclient, topicTiltAngle, 9);
+
+        //cout << angleID << endl;
+      if (featureId <= 20) featureId++;
     }
   }
 }
